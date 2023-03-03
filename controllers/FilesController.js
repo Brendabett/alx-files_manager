@@ -9,20 +9,16 @@ export default class FilesController {
     const {
       name, type, parentId, isPublic, data,
     } = request.body;
-    if (!name || !type || (![folder, file, image].includes(type)) || (!data && type !== folder)) {
+    if (!name || !type || (!['folder', 'file', 'image'].includes(type)) || (!data && type !== 'folder')) {
       // eslint-disable-next-line no-nested-ternary
-      response.status(400).send(`error: ${!name ? Missing name : (!type || (![folder, file, image].includes(type)))
-        ? Missing type : Missing data}`);
-<<<<<<< HEAD
-    if (!name || !type || (![folder, file, image].includes(type)) || (!data && type !== folder)) {
-      // eslint-disable-next-line no-nested-ternary
-      response.status(400).send(`error: ${!name ? Missing name : (!type || (![folder, file, image].includes(type)))
-        ? Missing type : Missing data}`);
+      response.status(400).send(`error: ${!name ? 'Missing name' : (!type || (!['folder', 'file', 'image'].includes(type)))
+        ? 'Missing type' : 'Missing data'}`);
     } else {
       try {
         let flag = false;
         if (parentId) {
           const folder = await dbClient.filterFiles({ _id: parentId });
+          if (!folder) {
             response.status(400).json({ error: 'Parent not found' }).end();
             flag = true;
           } else if (folder.type !== 'folder') {
@@ -30,6 +26,7 @@ export default class FilesController {
             flag = true;
           }
         }
+        if (!flag) {
           const insRes = await dbClient.newFile(userId, name, type, isPublic, parentId, data);
           const docs = insRes.ops[0];
           delete docs.localPath;
@@ -42,10 +39,12 @@ export default class FilesController {
       }
     }
   }
+
   static async getShow(request, response) {
     const usrId = request.user._id;
     const { id } = request.params;
     const file = await dbClient.filterFiles({ _id: id });
+    if (!file) {
       response.status(404).json({ error: 'Not found' }).end();
     } else if (String(file.userId) !== String(usrId)) {
       response.status(404).json({ error: 'Not found' }).end();
@@ -76,6 +75,7 @@ export default class FilesController {
   static async putPublish(request, response) {
     const userId = request.usr._id;
     const file = await dbClient.filterFiles({ _id: request.params.id });
+    if (!file || String(file.userId) !== String(userId)) {
       response.status(404).json({ error: 'Not found' }).end();
     } else {
       const newFile = await dbClient.updatefiles({ _id: file._id }, { isPublic: true });
@@ -86,6 +86,7 @@ export default class FilesController {
   static async putUnpublish(request, response) {
     const userId = request.usr._id;
     const file = await dbClient.filterFiles({ _id: request.params.id });
+    if (!file || String(file.userId) !== String(userId)) {
       response.status(404).json({ error: 'Not found' }).end();
     } else {
       const newFile = await dbClient.updatefiles({ _id: file._id }, { isPublic: false });
@@ -96,22 +97,20 @@ export default class FilesController {
   static async getFile(request, response) {
     const usrId = request.usr._id;
     const file = await dbClient.filterFiles({ _id: request.params.id });
+    if (!file) {
       response.status(404).json({ error: 'Not found' }).end();
     } else if (file.type === 'folder') {
-      response.status(400).json({ error: A folder doesnt have content" }).end();
+      response.status(400).json({ error: "A folder doesn't have content" }).end();
     } else if ((String(file.userId) === String(usrId)) || file.isPublic) {
       try {
         const content = await UtilController.readFile(file.localPath);
-        const header = { Content-Type: contentType(file.name) };
+        const header = { 'Content-Type': contentType(file.name) };
         response.set(header).status(200).send(content).end();
       } catch (err) {
-        response.status(404).json({ error: Not found }).end();
+        response.status(404).json({ error: 'Not found' }).end();
       }
     } else {
-      response.status(404).json({ error: Not found }).end();
+      response.status(404).json({ error: 'Not found' }).end();
     }
   }
-}" >> controllers/FilesController.js
-
-=======
->>>>>>> c70b0a2df74fb1826fde931d8b14852949e17ba4
+}
