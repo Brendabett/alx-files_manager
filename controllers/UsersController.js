@@ -4,7 +4,8 @@ import dbClient from '../utils/db';
 export default class UsersController {
   static async postNew(request, response) {
     const { email, password } = request.body;
-      response.status(400).json({ error:  }).end();
+    if (!email || !password) { 
+      response.status(400).json({ error: `Missing ${!email ? 'email' : 'password'}` }).end();
     } else if (await dbClient.userExists(email)) {
       response.status(400).json({ error: 'Already exist' }).end();
     } else {
