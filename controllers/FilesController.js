@@ -13,7 +13,3 @@ export default class FilesController {
       // eslint-disable-next-line no-nested-ternary
       response.status(400).send(`error: ${!name ? Missing name : (!type || (![folder, file, image].includes(type)))
         ? Missing type : Missing data}`);
-    if (!name || !type || (![folder, file, image].includes(type)) || (!data && type !== folder)) {
-      // eslint-disable-next-line no-nested-ternary
-      response.status(400).send(`error: ${!name ? Missing name : (!type || (![folder, file, image].includes(type)))
-        ? Missing type : Missing data}`);
