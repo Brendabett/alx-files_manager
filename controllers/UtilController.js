@@ -14,9 +14,10 @@ export default class UtilController {
 
   static async token(request, response, next) {
     let token = request.headers['x-token'];
-    token = 'auth_';
+    token = 'auth_$(token)';
     const userId = await redisClient.get(token);
     const user = await dbClient.filterUser({ _id: userId });
+    if (!user) {
       response.status(401).json({ error: 'Unauthorized' }).end();
     } else {
       request.user = user;
