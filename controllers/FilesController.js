@@ -1,116 +1,186 @@
-/* eslint-disable no-param-reassign */
+import fs from 'fs';
+import Queue from 'bull';
 import { contentType } from 'mime-types';
+import { ObjectID } from 'mongodb';
+import { v4 } from 'uuid';
+import { env } from 'process';
 import dbClient from '../utils/db';
-import UtilController from './UtilController';
+import redisClient from '../utils/redis';
 
-export default class FilesController {
-  static async postUpload(request, response) {
-    const userId = request.user.id;
+const fileQueue = new Queue('fileQueue', 'redis://127.0.0.1:6379');
+
+const getUser = async (req) => {
+  const token = req.header('X-Token');
+  if (!token) return null;
+  const userId = await redisClient.get(`auth_${token}`);
+  if (userId) {
+    const user = await dbClient.findUser({ _id: userId });
+    if (!user) return null;
+    return user;
+  }
+  return null;
+};
+
+class FilesController {
+  static async postUpload(req, res) {
+    const user = await getUser(req);
+
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+
     const {
-      name, type, parentId, isPublic, data,
-    } = request.body;
-    if (!name || !type || (!['folder', 'file', 'image'].includes(type)) || (!data && type !== 'folder')) {
-      // eslint-disable-next-line no-nested-ternary
-      response.status(400).send(`error: ${!name ? 'Missing name' : (!type || (!['folder', 'file', 'image'].includes(type)))
-        ? 'Missing type' : 'Missing data'}`);
-    } else {
+      name,
+      type,
+      parentId,
+      data,
+    } = req.body;
+
+    const isPublic = req.body.isPublic || false;
+
+    if (!name) return res.status(400).json({ error: 'Missing name' });
+
+    if (!type || !['folder', 'file', 'image'].includes(type)) return res.status(400).json({ error: 'Missing type' });
+
+    if (!data && type !== 'folder') return res.status(400).json({ error: 'Missing data' });
+
+    if (parentId) {
+      const folder = await dbClient.findFile({ _id: parentId });
+      if (!folder) return res.status(400).json({ error: 'Parent not found' });
+      if (folder.type !== 'folder') return res.status(400).json({ error: 'Parent is not a folder' });
+    }
+
+    if (type === 'folder') {
+      const folder = await dbClient.addFile({
+        userId: ObjectID(user._id),
+        name,
+        type,
+        parentId: parentId || 0,
+        isPublic,
+      });
+      const savedFolder = { ...folder.ops[0], id: folder.insertedId };
+      delete savedFolder._id;
+      return res.status(201).json(savedFolder);
+    }
+
+    const filePath = env.FOLDER_PATH || '/tmp/files_manager';
+    const fileName = `${filePath}/${v4()}`;
+    const buff = Buffer.from(data, 'base64');
+
+    try {
       try {
-        let flag = false;
-        if (parentId) {
-          const folder = await dbClient.filterFiles({ _id: parentId });
-          if (!folder) {
-            response.status(400).json({ error: 'Parent not found' }).end();
-            flag = true;
-          } else if (folder.type !== 'folder') {
-            response.status(400).json({ error: 'Parent is not a folder' }).end();
-            flag = true;
-          }
-        }
-        if (!flag) {
-          const insRes = await dbClient.newFile(userId, name, type, isPublic, parentId, data);
-          const docs = insRes.ops[0];
-          delete docs.localPath;
-          docs.id = docs._id;
-          delete docs._id;
-          response.status(201).json(docs).end();
-        }
+        await fs.mkdir(filePath, () => {
+          // console.log('Path already exists');
+        });
       } catch (err) {
-        response.status(400).json({ error: err.message }).end();
+        // console.log(err);
       }
+      await fs.writeFile(fileName, buff, () => console.log());
+    } catch (err) {
+      console.log(err.message);
     }
-  }
 
-  static async getShow(request, response) {
-    const usrId = request.user._id;
-    const { id } = request.params;
-    const file = await dbClient.filterFiles({ _id: id });
-    if (!file) {
-      response.status(404).json({ error: 'Not found' }).end();
-    } else if (String(file.userId) !== String(usrId)) {
-      response.status(404).json({ error: 'Not found' }).end();
-    } else {
-      response.status(200).json(file).end();
-    }
-  }
-
-  static async getIndex(request, response) {
-    const usrId = request.user._id;
-    const _parentId = request.query.parentId ? request.query.parentId : '0';
-    const page = request.query.page ? request.query.page : 0;
-    const cursor = await dbClient.findFiles(
-      { parentId: _parentId, userId: usrId },
-      { limit: 20, skip: 20 * page },
-    );
-    const res = await cursor.toArray();
-    res.map((i) => {
-      // eslint-disable-next-line no-param-reassign
-      i.id = i._id;
-      // eslint-disable-next-line no-param-reassign
-      delete i._id;
-      return i;
+    const file = await dbClient.addFile({
+      userId: ObjectID(user._id),
+      name,
+      type,
+      parentId: parentId || 0,
+      isPublic,
+      localPath: fileName,
     });
-    response.status(200).json(res).end();
-  }
 
-  static async putPublish(request, response) {
-    const userId = request.usr._id;
-    const file = await dbClient.filterFiles({ _id: request.params.id });
-    if (!file || String(file.userId) !== String(userId)) {
-      response.status(404).json({ error: 'Not found' }).end();
-    } else {
-      const newFile = await dbClient.updatefiles({ _id: file._id }, { isPublic: true });
-      response.status(200).json(newFile).end();
+    const savedFile = { ...file.ops[0], id: file.insertedId };
+    delete savedFile._id;
+
+    if (type === 'image') {
+      fileQueue.add({ userId: user._id, fileId: savedFile.id });
     }
+
+    return res.status(201).json(savedFile);
   }
 
-  static async putUnpublish(request, response) {
-    const userId = request.usr._id;
-    const file = await dbClient.filterFiles({ _id: request.params.id });
-    if (!file || String(file.userId) !== String(userId)) {
-      response.status(404).json({ error: 'Not found' }).end();
+  static async getShow(req, res) {
+    const user = await getUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+    const file = await dbClient.findFile({ _id: id, userId: user._id });
+    if (!file) return res.status(404).json({ error: 'Not found' });
+    return res.status(200).json(file);
+  }
+
+  static async getIndex(req, res) {
+    const user = await getUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { parentId, page } = req.query;
+    const pageNum = page || 0;
+
+    let queryFilter;
+    if (!parentId) {
+      queryFilter = { userId: user._id };
     } else {
-      const newFile = await dbClient.updatefiles({ _id: file._id }, { isPublic: false });
-      response.status(200).json(newFile).end();
+      queryFilter = { userId: user._id, parentId };
     }
+
+    const filesList = await dbClient.findFiles(
+      { ...queryFilter },
+      { limit: 20, skip: 20 * pageNum },
+    );
+
+    const files = filesList.map((file) => {
+      // eslint-disable-next-line no-param-reassign
+      file.id = file._id;
+      // eslint-disable-next-line no-param-reassign
+      delete file._id;
+      return file;
+    });
+
+    return res.status(200).json(files);
   }
 
-  static async getFile(request, response) {
-    const usrId = request.usr._id;
-    const file = await dbClient.filterFiles({ _id: request.params.id });
-    if (!file) {
-      response.status(404).json({ error: 'Not found' }).end();
-    } else if (file.type === 'folder') {
-      response.status(400).json({ error: "A folder doesn't have content" }).end();
-    } else if ((String(file.userId) === String(usrId)) || file.isPublic) {
-      try {
-        const content = await UtilController.readFile(file.localPath);
+  static async putPublish(req, res) {
+    const user = await getUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+    const file = await dbClient.findFile({ _id: id, userId: user._id });
+    if (!file) return res.status(404).json({ error: 'Not found' });
+    await dbClient.updateFile({ ...file, isPublic: true });
+    file.id = file._id;
+    delete file._id;
+    return res.status(200).json({ ...file, isPublic: true });
+  }
+
+  static async putUnpublish(req, res) {
+    const user = await getUser(req);
+    if (!user) return res.status(401).json({ error: 'Unauthorized' });
+    const { id } = req.params;
+    const file = await dbClient.findFile({ _id: id, userId: user._id });
+    if (!file) return res.status(404).json({ error: 'Not found' });
+    await dbClient.updateFile({ ...file, isPublic: false });
+    file.id = file._id;
+    delete file._id;
+    return res.status(200).json({ ...file, isPublic: false });
+  }
+
+  // eslint-disable-next-line consistent-return
+  static async getFile(req, res) {
+    const user = await getUser(req);
+    const { id } = req.params;
+    const { size } = req.query;
+    const file = await dbClient.findFile({ _id: id });
+    if (!file) return res.status(404).json({ error: 'Not found' });
+    if (!file.isPublic && (!user || String(file.userId) !== String(user._id))) return res.status(404).json({ error: 'Not found' });
+    if (file.type === 'folder') return res.status(400).json({ error: 'A folder doesn\'t have content' });
+    if (!file.localPath) return res.status(404).json({ error: 'Not found' });
+
+    try {
+      let fileName = file.localPath;
+      if (size && ['500', '250', '100'].includes(size)) fileName = `${fileName}_${size}`;
+      fs.readFile(fileName, (err, data) => {
         const header = { 'Content-Type': contentType(file.name) };
-        response.set(header).status(200).send(content).end();
-      } catch (err) {
-        response.status(404).json({ error: 'Not found' }).end();
-      }
-    } else {
-      response.status(404).json({ error: 'Not found' }).end();
+        return res.set(header).status(200).send(data);
+      });
+    } catch (err) {
+      return res.status(404).json({ error: 'Not found' });
     }
   }
 }
+
+export default FilesController;
