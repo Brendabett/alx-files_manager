@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { promises as fs } from 'fs';
 import Queue from 'bull';
 import imageThumbnail from 'image-thumbnail';
