@@ -63,10 +63,28 @@ class DBClient {
     return fileCollection.insertOne(file);
   }
 
-  async findFiles(filters) {
+  async findFiles(filters, page, maxNumFiles) {
     const myDB = this.myClient.db();
     const fileCollection = myDB.collection('files');
-    return fileCollection.find(filters).toArray();
+    return fileCollection
+      .aggregate([
+        { $match: filters },
+        { $sort: { _id: -1 } },
+        { $skip: page * maxNumFiles },
+        { $limit: maxNumFiles },
+        {
+          $project: {
+            id: '$_id',
+            userId: '$userId',
+            name: '$name',
+            type: '$type',
+            isPublic: '$isPublic',
+            parentId: {
+              $cond: { if: { $eq: ['$parentId', '0'] }, then: 0, else: '$parentId' },
+            },
+          },
+        },
+      ]).toArray();
   }
 
   async updateFile(file) {

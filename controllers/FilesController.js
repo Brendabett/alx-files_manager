@@ -7,6 +7,7 @@ import { env } from 'process';
 import dbClient from '../utils/db';
 import redisClient from '../utils/redis';
 
+const maxFilesPerPage = 20;
 const fileQueue = new Queue('fileQueue', 'redis://127.0.0.1:6379');
 
 const getUser = async (req) => {
@@ -119,20 +120,9 @@ class FilesController {
       queryFilter = { userId: user._id, parentId };
     }
 
-    const filesList = await dbClient.findFiles(
-      { ...queryFilter },
-      { limit: 20, skip: 20 * pageNum },
-    );
+    const filesList = await dbClient.findFiles({ ...queryFilter }, pageNum, maxFilesPerPage);
 
-    const files = filesList.map((file) => {
-      // eslint-disable-next-line no-param-reassign
-      file.id = file._id;
-      // eslint-disable-next-line no-param-reassign
-      delete file._id;
-      return file;
-    });
-
-    return res.status(200).json(files);
+    return res.status(200).json(filesList);
   }
 
   static async putPublish(req, res) {
