@@ -13,6 +13,7 @@ import { expect } from 'chai';
 import request from 'request';
 import { tmpdir } from 'os';
 import { join as pathJoin } from 'path';
+import { ObjectId } from 'mongodb';
 import {
   existsSync,
   readdirSync,
@@ -22,7 +23,7 @@ import {
 import dbClient from '../../utils/db';
 
 const url = 'http://0.0.0.0:5000';
-const DEFAULT_ROOT_FOLDER = 'files_manager';
+const DEFAULT_ROOT_FOLDER = 'test_files_manager';
 
 describe('FileController', () => {
   let token = '';
@@ -338,6 +339,473 @@ describe('FileController', () => {
         expect(JSON.parse(body).isPublic).to.be.equal(false);
         // expect(JSON.parse(body).parentId).to.be.equal(mockFiles[1].id);
         expect(JSON.parse(body).userId).to.exist;
+        done();
+      });
+    });
+  });
+
+  describe('GET /files', () => {
+    it('Fails with no "X-Token" header field', (done) => {
+      request.get(`${url}/files`, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(401);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Unauthorized' });
+        done();
+      });
+    });
+
+    it('Fails for non-existent user', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files`,
+        headers: {
+          'X-Token': 'asdfghjkqwerty',
+        },
+      };
+      request.get(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(401);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Unauthorized' });
+        done();
+      });
+    });
+
+    it('Fetches first page with no page query', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files`,
+        headers: {
+          'X-Token': token,
+        },
+      };
+      request.get(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(200);
+        expect(JSON.parse(body).length).to.be.equal(3);
+        expect(JSON.parse(body).some((file) => file.name === mockFiles[0].name)).to.be.true;
+        expect(JSON.parse(body).some((file) => file.name === mockFiles[1].name)).to.be.true;
+        expect(JSON.parse(body).some((file) => file.name === mockFiles[2].name)).to.be.true;
+        done();
+      });
+    });
+
+    it('Fetches first page with no page query and with parentId', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files?parentId=0`,
+        headers: {
+          'X-Token': token,
+        },
+      };
+      request.get(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(200);
+        expect(JSON.parse(body).length).to.be.equal(0);
+        done();
+      });
+    });
+
+    it('Fetches an empty list for an out of bound page param', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files?page=5`,
+        headers: {
+          'X-Token': token,
+        },
+      };
+      request.get(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(200);
+        expect(JSON.parse(body).length).to.be.equal(0);
+        expect(JSON.parse(body)).to.deep.equal([]);
+        done();
+      });
+    });
+
+    it('Fetches an empty list for unknown parentId', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files?parentId=fghjk12weg`,
+        headers: {
+          'X-Token': token,
+        },
+      };
+      request.get(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(200);
+        expect(JSON.parse(body).length).to.be.equal(0);
+        expect(JSON.parse(body)).to.deep.equal([]);
+        done();
+      });
+    });
+  });
+
+  describe('GET /files/:id', () => {
+    let fileId = '';
+    before(function (done) {
+      this.timeout(1000);
+      const options = {
+        url: `${url}/files`,
+        headers: {
+          'X-Token': token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: mockFiles[0].name,
+          type: mockFiles[0].type,
+          data: mockFiles[0].b64Data(),
+        }),
+      };
+      request.post(options, (err, _, body) => {
+        if (err) return done(err);
+        fileId = JSON.parse(body).id;
+        done();
+      });
+    });
+
+    it('Fails with no "X-Token" header field', (done) => {
+      request.get(`${url}/files/34567876`, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(401);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Unauthorized' });
+        done();
+      });
+    });
+
+    it('Fails for non-existent user', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files/23456788765`,
+        headers: {
+          'X-Token': 'asdfghjkqwerty',
+        },
+      };
+      request.get(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(401);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Unauthorized' });
+        done();
+      });
+    });
+
+    it('Fails if file is not owned by the user', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files/${new ObjectId()}`,
+        headers: {
+          'X-Token': token,
+        },
+      };
+      request.get(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(404);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Not found' });
+        done();
+      });
+    });
+
+    it('Succeeds if file is owned by the user', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files/${fileId}`,
+        headers: {
+          'X-Token': token,
+        },
+      };
+      request.get(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(200);
+        expect(JSON.parse(body).name).to.equal(mockFiles[0].name);
+        done();
+      });
+    });
+  });
+
+  describe('PUT /files/:id/publish', () => {
+    let fileId = '';
+
+    before(function (done) {
+      this.timeout(1000);
+      const options = {
+        url: `${url}/files`,
+        headers: {
+          'X-Token': token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: mockFiles[0].name,
+          type: mockFiles[0].type,
+          data: mockFiles[0].b64Data(),
+          isPublic: false,
+        }),
+      };
+      request.post(options, (err, _, body) => {
+        if (err) return done(err);
+        fileId = JSON.parse(body).id;
+        done();
+      });
+    });
+
+    it('Fails with no "X-Token" header field', (done) => {
+      request.put(`${url}/files/34567876/publish`, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(401);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Unauthorized' });
+        done();
+      });
+    });
+
+    it('Fails for non-existent user', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files/23456788765/publish`,
+        headers: {
+          'X-Token': 'asdfghjkqwerty',
+        },
+      };
+      request.put(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(401);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Unauthorized' });
+        done();
+      });
+    });
+
+    it('Fails if file is not owned by the user', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files/${new ObjectId()}/publish`,
+        headers: {
+          'X-Token': token,
+        },
+      };
+      request.put(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(404);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Not found' });
+        done();
+      });
+    });
+
+    it('Succeeds if file is owned by the user', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files/${fileId}/publish`,
+        headers: {
+          'X-Token': token,
+        },
+      };
+      request.put(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(200);
+        expect(JSON.parse(body).isPublic).to.be.equal(true);
+        expect(JSON.parse(body).name).to.be.equal(mockFiles[0].name);
+        expect(JSON.parse(body).type).to.be.equal(mockFiles[0].type);
+        expect(JSON.parse(body).userId).to.exist;
+        expect(JSON.parse(body).id).to.exist;
+        done();
+      });
+    });
+  });
+
+  describe('PUT /files/:id/unpublish', () => {
+    let fileId = '';
+
+    before(function (done) {
+      this.timeout(1000);
+      const options = {
+        url: `${url}/files`,
+        headers: {
+          'X-Token': token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: mockFiles[0].name,
+          type: mockFiles[0].type,
+          data: mockFiles[0].b64Data(),
+          isPublic: true,
+        }),
+      };
+      request.post(options, (err, _, body) => {
+        if (err) return done(err);
+        fileId = JSON.parse(body).id;
+        done();
+      });
+    });
+
+    it('Fails with no "X-Token" header field', (done) => {
+      request.put(`${url}/files/34567876/unpublish`, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(401);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Unauthorized' });
+        done();
+      });
+    });
+
+    it('Fails for non-existent user', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files/23456788765/unpublish`,
+        headers: {
+          'X-Token': 'asdfghjkqwerty',
+        },
+      };
+      request.put(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(401);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Unauthorized' });
+        done();
+      });
+    });
+
+    it('Fails if file is not owned by the user', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files/${new ObjectId()}/unpublish`,
+        headers: {
+          'X-Token': token,
+        },
+      };
+      request.put(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(404);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Not found' });
+        done();
+      });
+    });
+
+    it('Succeeds if file is owned by the user', function (done) {
+      this.timeout(5000);
+      const options = {
+        url: `${url}/files/${fileId}/unpublish`,
+        headers: {
+          'X-Token': token,
+        },
+      };
+      request.put(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(200);
+        expect(JSON.parse(body).isPublic).to.be.equal(false);
+        expect(JSON.parse(body).name).to.be.equal(mockFiles[0].name);
+        expect(JSON.parse(body).type).to.be.equal(mockFiles[0].type);
+        expect(JSON.parse(body).userId).to.exist;
+        expect(JSON.parse(body).id).to.exist;
+        done();
+      });
+    });
+  });
+
+  describe('GET /files/:id/data', () => {
+    let fileId = '';
+
+    before(function (done) {
+      this.timeout(1000);
+      const options = {
+        url: `${url}/files`,
+        headers: {
+          'X-Token': token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: mockFiles[0].name,
+          type: mockFiles[0].type,
+          data: mockFiles[0].b64Data(),
+          isPublic: false,
+        }),
+      };
+      request.post(options, (err, _, body) => {
+        if (err) return done(err);
+        fileId = JSON.parse(body).id;
+        done();
+      });
+    });
+
+    it('Fails if the file does not exist', (done) => {
+      request.get(`${url}/files/${new ObjectId()}/data`, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(404);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Not found' });
+        done();
+      });
+    });
+
+    it('Fails if the file is not public and not requested by the owner', (done) => {
+      const options = {
+        url: `${url}/files/${fileId}/data`,
+        headers: {
+          'X-Token': 'xcvbhgertmndfgkjdbvd',
+        },
+      };
+      request.get(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(404);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Not found' });
+        done();
+      });
+    });
+
+    it('Succeeds if the file is not public but requested by the owner', (done) => {
+      const options = {
+        url: `${url}/files/${fileId}/data`,
+        headers: {
+          'X-Token': token,
+        },
+      };
+      request.get(options, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(200);
+        expect(body).to.deep.equal(mockFiles[0].data);
+        done();
+      });
+    });
+
+    it('Succeeds if the file is public but not requested by the owner', (done) => {
+      const options = {
+        url: `${url}/files/${fileId}/publish`,
+        headers: {
+          'X-Token': token,
+        },
+      };
+      request.put(options, (err, _res, _body) => {
+        if (err) return done(err);
+        request.get(`${url}/files/${fileId}/data`, (err, res, body) => {
+          if (err) return done(err);
+          expect(res.statusCode).to.be.equal(200);
+          expect(body).to.deep.equal(mockFiles[0].data);
+          done();
+        });
+      });
+    });
+
+    it('Fails if the type of file document is a folder', (done) => {
+      let fileId = '';
+      const options = {
+        url: `${url}/files`,
+        headers: {
+          'X-Token': token,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ...mockFiles[1], isPublic: true }),
+      };
+      request.post(options, (err, req, body) => {
+        if (err) return done(err);
+        fileId = JSON.parse(body).id;
+        request(`${url}/files/${fileId}/data`, (error, response, bod) => {
+          if (error) return done(error);
+          expect(response.statusCode).to.be.equal(400);
+          expect(JSON.parse(bod)).to.deep.equal({ error: 'A folder doesn\'t have content' });
+          done();
+        });
+      });
+    });
+
+    it.skip('Fails if the file is not available locally', function (done) {
+      this.timeout(5000);
+      emptyFolder(baseDir);
+      request.get(`${url}/files/${fileId}/data`, (err, res, body) => {
+        if (err) return done(err);
+        expect(res.statusCode).to.be.equal(404);
+        expect(JSON.parse(body)).to.deep.equal({ error: 'Not found' });
         done();
       });
     });

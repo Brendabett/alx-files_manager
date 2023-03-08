@@ -6,15 +6,15 @@ class AppController {
     const redis = await redisClient.isAlive();
     const db = dbClient.isAlive();
     res.set('Content-Type', 'application/json');
-    return res.status(200).json({ redis, db }).end();
+    return res.status(200).json({ redis, db });
   }
 
   static async getStats(req, res) {
     const users = await dbClient.nbUsers();
     const files = await dbClient.nbFiles();
     res.set('Content-Type', 'application/json');
-    return res.status(200).json({ users, files }).end();
+    return res.status(200).json({ users, files });
   }
 }
 
-module.exports = AppController;
+export default AppController;

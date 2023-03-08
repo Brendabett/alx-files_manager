@@ -1,6 +1,7 @@
 /* eslint-disable jest/no-test-callback */
 /* eslint-disable jest/valid-expect */
 /* eslint-disable jest/valid-title */
+/* eslint-disable jest/no-hooks */
 /* eslint-disable jest/lowercase-name */
 /* eslint-disable jest/prefer-expect-assertions */
 /* eslint-disable no-undef */
@@ -14,7 +15,7 @@ import dbClient from '../../utils/db';
 const url = 'http://0.0.0.0:5000';
 
 describe('AppController', () => {
-  before(function (done) {
+  beforeEach(function (done) {
     this.timeout(1000);
     dbClient.clear().then((result) => {
       done();
