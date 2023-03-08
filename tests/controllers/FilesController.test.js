@@ -4,11 +4,21 @@
 /* eslint-disable jest/lowercase-name */
 /* eslint-disable jest/no-disabled-tests */
 /* eslint-disable jest/prefer-expect-assertions */
+/* eslint-disable no-undef */
+/* eslint-disable no-unused-vars */
+/* eslint-disable no-unused-expressions */
+/* eslint-disable consistent-return */
+/* eslint-disable func-names */
 import { expect } from 'chai';
 import request from 'request';
 import { tmpdir } from 'os';
 import { join as pathJoin } from 'path';
-import { existsSync, readdirSync, unlinkSync, statSync } from 'fs';
+import {
+  existsSync,
+  readdirSync,
+  unlinkSync,
+  statSync,
+} from 'fs';
 import dbClient from '../../utils/db';
 
 const url = 'http://0.0.0.0:5000';
@@ -23,7 +33,7 @@ describe('FileController', () => {
     email: 'bob@dylan.com',
     password: 'toto1234!',
   };
- 
+
   /** 3 sample files: file, folder and file for folder */
   const mockFiles = [
     {
@@ -32,7 +42,7 @@ describe('FileController', () => {
       data: [
         'An apple a day saves life',
         'A bird in and is worth 2 in the bush',
-        'An early bird catches the worm'
+        'An early bird catches the worm',
       ].join('\n'),
       b64Data() { return Buffer.from(this.data, 'utf-8').toString('base64'); },
     },
@@ -49,7 +59,7 @@ describe('FileController', () => {
         '# The School',
         '## Teaching timetable',
         '_ `Mathematics 8:00am - 9:00am`',
-        '- `Physics 10:00am - 11:00am`'
+        '- `Physics 10:00am - 11:00am`',
       ].join('\n'),
       b64Data() { return Buffer.from(this.data, 'utf-8').toString('base64'); },
     },
@@ -64,7 +74,7 @@ describe('FileController', () => {
       } else {
         emptyFolder(filePath);
       }
-    } 
+    }
   };
 
   const emptyDatabaseCollections = async (callback) => {
@@ -72,7 +82,7 @@ describe('FileController', () => {
       await dbClient.clear();
       if (callback) callback();
     } catch (err) {
-      if (callback) callback(err)
+      if (callback) callback(err);
     }
   };
 
@@ -147,7 +157,7 @@ describe('FileController', () => {
         url: `${url}/files`,
         headers: {
           'X-Token': token,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
         body: '{}',
       };
@@ -231,7 +241,7 @@ describe('FileController', () => {
         done();
       });
     });
- 
+
     it('Succeeds for valid values of file', (done) => {
       const options = {
         url: `${url}/files`,

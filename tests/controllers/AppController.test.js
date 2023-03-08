@@ -1,9 +1,12 @@
-
 /* eslint-disable jest/no-test-callback */
 /* eslint-disable jest/valid-expect */
 /* eslint-disable jest/valid-title */
 /* eslint-disable jest/lowercase-name */
 /* eslint-disable jest/prefer-expect-assertions */
+/* eslint-disable no-undef */
+/*  eslint-disable no-unused-vars */
+/* eslint-disable consistent-return */
+/* eslint-disable func-names */
 import { expect } from 'chai';
 import request from 'request';
 import dbClient from '../../utils/db';
@@ -34,7 +37,7 @@ describe('AppController', () => {
       request.get(`${url}/stats`, (err, res, body) => {
         if (err) return done(err);
         expect(res.statusCode).to.be.equal(200);
-        expect(body).to.deep.equal(`{"users":0,"files":0}`);
+        expect(JSON.parse(body)).to.deep.equal({ users: 0, files: 0 });
         done();
       });
     });
