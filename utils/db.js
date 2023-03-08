@@ -1,116 +1,35 @@
-import process from 'process';
-import { MongoClient, ObjectId } from 'mongodb';
+import { MongoClient } from 'mongodb';
+
+const HOST = process.env.DB_HOST || 'localhost';
+const PORT = process.env.DB_PORT || 27017;
+const DATABASE = process.env.DB_DATABASE || 'files_manager';
+
+const url = `mongodb://${HOST}:${PORT}`;
 
 class DBClient {
   constructor() {
-    const port = process.env.DB_PORT || 27017;
-    const host = process.env.DB_HOST || '127.0.0.1';
-    const database = process.env.DB_DATABASE || 'files_manager';
-    this.myClient = MongoClient(`mongodb://${host}:${port}/${database}`, { useUnifiedTopology: true });
-    this.myClient.connect();
+    this.client = new MongoClient(url, { useUnifiedTopology: true, useNewUrlParser: true });
+    this.client.connect().then(() => {
+      this.db = this.client.db(`${DATABASE}`);
+    }).catch((err) => {
+      console.log(err);
+    });
   }
 
   isAlive() {
-    return this.myClient.isConnected();
+    return this.client.isConnected();
   }
 
   async nbUsers() {
-    /* returns number of documents in the collection users */
-    const myDB = this.myClient.db();
-    const userCollection = myDB.collection('users');
-    return userCollection.countDocuments();
+    const users = this.db.collection('users');
+    const usersNum = await users.countDocuments();
+    return usersNum;
   }
 
   async nbFiles() {
-    /* returns number of documents in the collection files */
-    const myDB = this.myClient.db();
-    const fileCollection = myDB.collection('files');
-    return fileCollection.countDocuments();
-  }
-
-  async userExists(email) {
-    const myDB = this.myClient.db();
-    const userCollection = myDB.collection('users');
-    return userCollection.findOne({ email });
-  }
-
-  async addUser(user) {
-    const myDB = this.myClient.db();
-    const userCollection = myDB.collection('users');
-    return userCollection.insertOne(user);
-  }
-
-  async findUser(filters) {
-    const myDB = this.myClient.db();
-    const userCollection = myDB.collection('users');
-    if ('_id' in filters) filters._id = ObjectId(filters._id);
-    return userCollection.findOne(filters);
-  }
-
-  async findFile(filters) {
-    const myDB = this.myClient.db();
-    const fileCollection = myDB.collection('files');
-    const idFilters = ['_id', 'userId', 'parentId'].filter((prop) => prop in filters && filters[prop] !== '0');
-    idFilters.forEach((i) => {
-      filters[i] = ObjectId(filters[i]);
-    });
-    return fileCollection.findOne(filters);
-  }
-
-  async addFile(file) {
-    const myDB = this.myClient.db();
-    const fileCollection = myDB.collection('files');
-    return fileCollection.insertOne(file);
-  }
-
-  async findFiles(filters, page, maxNumFiles) {
-    const myDB = this.myClient.db();
-    const fileCollection = myDB.collection('files');
-    return fileCollection
-      .aggregate([
-        { $match: filters },
-        { $sort: { _id: -1 } },
-        { $skip: page * maxNumFiles },
-        { $limit: maxNumFiles },
-        {
-          $project: {
-            id: '$_id',
-            userId: '$userId',
-            name: '$name',
-            type: '$type',
-            isPublic: '$isPublic',
-            parentId: {
-              $cond: { if: { $eq: ['$parentId', '0'] }, then: 0, else: '$parentId' },
-            },
-          },
-        },
-      ]).toArray();
-  }
-
-  async updateFile(file) {
-    const myDB = this.myClient.db();
-    const fileCollection = myDB.collection('files');
-    return fileCollection.updateOne({ _id: file._id }, { $set: { ...file } });
-  }
-
-  async insertManyUsers(users) {
-    const myDB = this.myClient.db();
-    const usersCollection = myDB.collection('users');
-    await usersCollection.insertMany(users);
-  }
-
-  async insertManyFiles(files) {
-    const myDB = this.myClient.db();
-    const filesCollection = myDB.collection('files');
-    await filesCollection.insertMany(files);
-  }
-
-  async clear() {
-    const myDB = this.myClient.db();
-    const fileCollection = myDB.collection('files');
-    const userCollection = myDB.collection('users');
-    await fileCollection.deleteMany({});
-    await userCollection.deleteMany({});
+    const files = this.db.collection('files');
+    const filesNum = await files.countDocuments();
+    return filesNum;
   }
 }
 
